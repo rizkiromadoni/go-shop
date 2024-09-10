@@ -1,6 +1,8 @@
 package seeders
 
 import (
+	"fmt"
+
 	"github.com/rizkiromadoni/go-shop/database/fakers"
 	"gorm.io/gorm"
 )
@@ -24,5 +26,6 @@ func DBSeed(db *gorm.DB) error {
 		}
 	}
 
+	fmt.Println("Database seed completed successfully")
 	return nil
 }
