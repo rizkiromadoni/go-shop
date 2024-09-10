@@ -1,6 +1,7 @@
 package app
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 	"github.com/rizkiromadoni/go-shop/database/seeders"
+	"github.com/urfave/cli"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -35,9 +37,7 @@ type DBConfig struct {
 func (server *Server) Initialize(appConfig AppConfig, dbConfig DBConfig) {
 	fmt.Printf("Running %s \n", appConfig.AppName)
 
-	server.initializeDB(dbConfig)
 	server.InitializeRoutes()
-	seeders.DBSeed(server.DB)
 }
 
 func (server *Server) Run(addr string) {
@@ -53,9 +53,11 @@ func (server *Server) initializeDB(dbConfig DBConfig) {
 	if err != nil {
 		panic("Failed to connect to a database")
 	}
+}
 
+func (server *Server) dbMigrate() {
 	for _, model := range RegisterModel() {
-		err = server.DB.Debug().AutoMigrate(model.Model)
+		err := server.DB.Debug().AutoMigrate(model.Model)
 
 		if err != nil {
 			log.Fatal(err)
@@ -63,6 +65,37 @@ func (server *Server) initializeDB(dbConfig DBConfig) {
 	}
 
 	fmt.Println("Database migration succesfully")
+}
+
+func (server *Server) initCommands(dbConfig DBConfig) {
+	server.initializeDB(dbConfig)
+
+	cmdApp := cli.NewApp()
+	cmdApp.Commands = []cli.Command{
+		{
+			Name: "db:migrate",
+			Action: func(c *cli.Context) error {
+				server.dbMigrate()
+				return nil
+			},
+		},
+		{
+			Name: "db:seed",
+			Action: func(c *cli.Context) error {
+				err := seeders.DBSeed(server.DB)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				return nil
+			},
+		},
+	}
+
+	err := cmdApp.Run(os.Args)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func getEnv(key, fallback string) string {
@@ -93,6 +126,12 @@ func Run() {
 	dbConfig.DBPass = getEnv("DB_PASS", "postgres")
 	dbConfig.DBName = getEnv("DB_NAME", "go-shop")
 
-	server.Initialize(appConfig, dbConfig)
-	server.Run(":" + appConfig.AppPort)
+	flag.Parse()
+	arg := flag.Arg(0)
+	if arg != "" {
+		server.initCommands(dbConfig)
+	} else {
+		server.Initialize(appConfig, dbConfig)
+		server.Run(":" + appConfig.AppPort)
+	}
 }
